@@ -1,0 +1,70 @@
+import math
+
+def calculate_glonass_satellite_coordinates(ephemeris, t):
+    """
+    Calculate the ECEF coordinates of a GLONASS satellite.
+
+    Parameters:
+        ephemeris (dict): GLONASS ephemeris parameters containing:
+            - X: Satellite position at ephemeris reference time (km)
+            - Y: Satellite position at ephemeris reference time (km)
+            - Z: Satellite position at ephemeris reference time (km)
+            - Vx: Satellite velocity at ephemeris reference time (km/s)
+            - Vy: Satellite velocity at ephemeris reference time (km/s)
+            - Vz: Satellite velocity at ephemeris reference time (km/s)
+            - Ax: Satellite acceleration at ephemeris reference time (km/s^2)
+            - Ay: Satellite acceleration at ephemeris reference time (km/s^2)
+            - Az: Satellite acceleration at ephemeris reference time (km/s^2)
+            - toe: Reference time of ephemeris (s)
+        t (float): Time of interest (s)
+
+    Returns:
+        (tuple): Satellite ECEF coordinates (X, Y, Z) in km.
+    """
+    # Constants
+    OMEGA_E = 7.292115e-5  # Earth's rotation rate (rad/s)
+
+    # Extract ephemeris parameters
+    X, Y, Z = ephemeris['X'], ephemeris['Y'], ephemeris['Z']
+    Vx, Vy, Vz = ephemeris['Vx'], ephemeris['Vy'], ephemeris['Vz']
+    Ax, Ay, Az = ephemeris['Ax'], ephemeris['Ay'], ephemeris['Az']
+    toe = ephemeris['toe']
+
+    # Time difference from ephemeris reference time
+    dt = t - toe
+
+    # Update satellite position using velocity and acceleration
+    X_new = X + Vx * dt + 0.5 * Ax * dt**2
+    Y_new = Y + Vy * dt + 0.5 * Ay * dt**2
+    Z_new = Z + Vz * dt + 0.5 * Az * dt**2
+
+    # Correct for Earth's rotation during signal travel
+    theta = OMEGA_E * dt
+    X_rot = X_new * math.cos(theta) + Y_new * math.sin(theta)
+    Y_rot = -X_new * math.sin(theta) + Y_new * math.cos(theta)
+    Z_rot = Z_new  # Z-coordinate remains unaffected by Earth's rotation
+
+    return X_rot, Y_rot, Z_rot
+
+# Example usage
+if __name__ == "__main__":
+    # Sample ephemeris data (values are in km, km/s, and km/s^2)
+    sample_ephemeris = {
+        'X': 19184.455,
+        'Y': 10234.893,
+        'Z': 21743.101,
+        'Vx': -0.784,
+        'Vy': 1.214,
+        'Vz': -0.452,
+        'Ax': 0.000003,
+        'Ay': -0.000002,
+        'Az': 0.000001,
+        'toe': 432000  # Reference time (s)
+    }
+
+    # Calculate satellite position at time t = 432100 seconds
+    time_of_interest = 432100  # in seconds
+    satellite_coords = calculate_glonass_satellite_coordinates(sample_ephemeris, time_of_interest)
+
+    print(f"Satellite ECEF Coordinates at t={time_of_interest} s: X={satellite_coords[0]:.3f} km, "
+          f"Y={satellite_coords[1]:.3f} km, Z={satellite_coords[2]:.3f} km")
