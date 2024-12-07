@@ -1,0 +1,89 @@
+import numpy as np
+
+def solve_glonass_navigation(satellite_positions, pseudoranges, clock_offsets, initial_guess):
+    """
+    Solves the GLONASS navigation problem using the least squares method.
+
+    Parameters:
+        satellite_positions (np.ndarray): Array of satellite positions (X, Y, Z) in ECEF coordinates, shape (N, 3).
+        pseudoranges (np.ndarray): Array of pseudorange measurements, shape (N,).
+        clock_offsets (np.ndarray): Satellite clock offsets (in seconds), shape (N,).
+        initial_guess (np.ndarray): Initial guess for receiver position and clock bias (X, Y, Z, b), shape (4,).
+
+    Returns:
+        np.ndarray: Estimated receiver position and clock bias (X, Y, Z, b), shape (4,).
+    """
+
+    # Constants
+    c = 299792458  # Speed of light in m/s
+
+    # Initialize variables
+    receiver_state = np.array(initial_guess, dtype=float)
+    max_iterations = 10
+    tolerance = 1e-6
+
+    for _ in range(max_iterations):
+        # Extract current receiver position and clock bias
+        x, y, z, b = receiver_state
+
+        # Compute geometric distances to satellites
+        distances = np.sqrt((satellite_positions[:, 0] - x)**2 +
+                            (satellite_positions[:, 1] - y)**2 +
+                            (satellite_positions[:, 2] - z)**2)
+
+        # Predicted pseudoranges
+        predicted_pseudoranges = distances + c * b - c * clock_offsets
+
+        # Residuals (observed - predicted pseudoranges)
+        residuals = pseudoranges - predicted_pseudoranges
+
+        # Construct the Jacobian matrix
+        H = np.zeros((len(satellite_positions), 4))
+        for i, (sx, sy, sz) in enumerate(satellite_positions):
+            d = distances[i]
+            H[i, 0] = -(sx - x) / d  # Partial derivative w.r.t. x
+            H[i, 1] = -(sy - y) / d  # Partial derivative w.r.t. y
+            H[i, 2] = -(sz - z) / d  # Partial derivative w.r.t. z
+            H[i, 3] = c              # Partial derivative w.r.t. clock bias
+
+        # Solve for the update using least squares
+        delta = np.linalg.lstsq(H, residuals, rcond=None)[0]
+
+        # Update the receiver state
+        receiver_state += delta
+
+        # Check for convergence
+        if np.linalg.norm(delta) < tolerance:
+            break
+
+    return receiver_state
+
+
+# Example usage
+if __name__ == "__main__":
+    # Satellite positions in ECEF (X, Y, Z) [meters]
+    satellite_positions = np.array([
+        [15600e3, 7540e3, 20140e3],
+        [18760e3, 2750e3, 18610e3],
+        [17610e3, 14630e3, 13480e3],
+        [19170e3, 610e3, 21300e3],
+    ])
+
+    # Pseudoranges [meters]
+    pseudoranges = np.array([20200000, 20400000, 21000000, 21200000])
+
+    # Satellite clock offsets [seconds]
+    clock_offsets = np.array([0, 0, 0, 0])  # Assuming no clock offsets for simplicity
+
+    # Initial guess for receiver position (X, Y, Z) [meters] and clock bias [seconds]
+    initial_guess = [0, 0, 0, 0]
+
+    # Solve the navigation problem
+    solution = solve_glonass_navigation(satellite_positions, pseudoranges, clock_offsets, initial_guess)
+
+    # Display the result
+    print("Estimated Receiver State:")
+    print(f"X: {solution[0]:.2f} m")
+    print(f"Y: {solution[1]:.2f} m")
+    print(f"Z: {solution[2]:.2f} m")
+    print(f"Clock Bias: {solution[3]:.9f} s")
