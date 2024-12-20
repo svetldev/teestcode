@@ -1,0 +1,100 @@
+import numpy as np
+
+def compute_weight_matrix(elevations, snrs):
+    """
+    Computes the weight matrix for a GPS system based on elevation angles and SNR.
+
+    Parameters:
+        elevations (np.ndarray): Elevation angles (in radians) of satellites.
+        snrs (np.ndarray): Signal-to-noise ratios (SNR) for satellites.
+
+    Returns:
+        np.ndarray: Weight matrix (diagonal).
+    """
+    # Compute weights based on elevation and SNR
+    weights = (np.sin(elevations)**2) * (snrs / np.max(snrs))
+
+    # Construct the diagonal weight matrix
+    weight_matrix = np.diag(weights)
+    
+    return weight_matrix
+
+# Example usage
+if __name__ == "__main__":
+    # Elevation angles in radians
+    elevations = np.radians([30, 45, 60, 15])  # Example values in degrees
+    
+    # Signal-to-noise ratios
+    snrs = np.array([40, 50, 55, 30])  # Example SNR values
+
+    # Compute weight matrix
+    W = compute_weight_matrix(elevations, snrs)
+    print("Weight Matrix:")
+    print(W)
+
+
+import numpy as np
+
+def calculate_variance(elevation_angle, snr, k_ion=5.0, k_trop=0.5, k_multipath=1.0):
+    """
+    Calculates the variance of a pseudorange measurement.
+
+    Parameters:
+        elevation_angle (float): Elevation angle in radians.
+        snr (float): Signal-to-Noise Ratio (SNR) for the satellite.
+        k_ion (float): Scaling constant for ionospheric error.
+        k_trop (float): Scaling constant for tropospheric error.
+        k_multipath (float): Scaling constant for multipath error.
+
+    Returns:
+        float: Variance of the pseudorange measurement.
+    """
+    # Ionospheric variance
+    sigma_ion2 = k_ion**2 * (1 / np.sin(elevation_angle))**2
+
+    # Tropospheric variance
+    sigma_trop2 = k_trop**2 * (1 / np.sin(elevation_angle))**2
+
+    # Receiver noise variance
+    sigma_noise2 = 1 / snr
+
+    # Multipath variance
+    sigma_multipath2 = k_multipath**2
+
+    # Total variance
+    variance = sigma_ion2 + sigma_trop2 + sigma_noise2 + sigma_multipath2
+    return variance
+
+def calculate_weight_matrix(elevation_angles, snrs, k_ion=5.0, k_trop=0.5, k_multipath=1.0):
+    """
+    Calculates the weight matrix for pseudorange measurements.
+
+    Parameters:
+        elevation_angles (np.ndarray): Array of elevation angles in radians.
+        snrs (np.ndarray): Array of SNRs for satellites.
+        k_ion (float): Scaling constant for ionospheric error.
+        k_trop (float): Scaling constant for tropospheric error.
+        k_multipath (float): Scaling constant for multipath error.
+
+    Returns:
+        np.ndarray: Weight matrix (diagonal).
+    """
+    variances = np.array([
+        calculate_variance(elev, snr, k_ion, k_trop, k_multipath)
+        for elev, snr in zip(elevation_angles, snrs)
+    ])
+    weights = 1 / variances
+    return np.diag(weights)
+
+# Example usage
+if __name__ == "__main__":
+    # Elevation angles in radians
+    elevation_angles = np.radians([30, 45, 60, 15])
+
+    # Signal-to-Noise Ratios
+    snrs = np.array([40, 50, 55, 30])
+
+    # Calculate weight matrix
+    W = calculate_weight_matrix(elevation_angles, snrs)
+    print("Weight Matrix:")
+    print(W)
