@@ -1,0 +1,322 @@
+import numpy as np
+
+def ecef_to_enu_matrix(lat, lon):
+    """
+    Computes the ECEF to ENU rotation matrix.
+
+    Parameters:
+        lat (float): Receiver latitude in radians.
+        lon (float): Receiver longitude in radians.
+
+    Returns:
+        np.ndarray: 3x3 rotation matrix.
+    """
+    sin_lat = np.sin(lat)
+    cos_lat = np.cos(lat)
+    sin_lon = np.sin(lon)
+    cos_lon = np.cos(lon)
+
+    return np.array([
+        [-sin_lon, cos_lon, 0],
+        [-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat],
+        [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat]
+    ])
+
+def calculate_elevation_angle(satellite_pos, receiver_pos, lat, lon):
+    """
+    Calculates the elevation angle of a satellite relative to a receiver.
+
+    Parameters:
+        satellite_pos (np.ndarray): Satellite position in ECEF [X, Y, Z].
+        receiver_pos (np.ndarray): Receiver position in ECEF [X, Y, Z].
+        lat (float): Receiver latitude in radians.
+        lon (float): Receiver longitude in radians.
+
+    Returns:
+        float: Elevation angle in radians.
+    """
+    # Line-of-sight vector in ECEF
+    los_vector = satellite_pos - receiver_pos
+
+    # ECEF to ENU rotation matrix
+    R_ecef_to_enu = ecef_to_enu_matrix(lat, lon)
+
+    # Transform LOS vector to ENU frame
+    enu_vector = R_ecef_to_enu @ los_vector
+
+    # Calculate elevation angle
+    elevation_angle = np.arcsin(enu_vector[2] / np.linalg.norm(enu_vector))
+    return elevation_angle
+
+# Example usage
+if __name__ == "__main__":
+    # Satellite position in ECEF (meters)
+    satellite_position = np.array([15600e3, 7540e3, 20140e3])
+
+    # Receiver position in ECEF (meters)
+    receiver_position = np.array([6378137.0, 0, 0])  # Near the equator
+
+    # Receiver latitude and longitude in radians
+    receiver_lat = np.radians(0)  # Equator
+    receiver_lon = np.radians(0)  # Prime meridian
+
+    # Calculate elevation angle
+    elevation = calculate_elevation_angle(satellite_position, receiver_position, receiver_lat, receiver_lon)
+
+    # Convert to degrees
+    elevation_deg = np.degrees(elevation)
+    print(f"Elevation Angle: {elevation_deg:.2f} degrees")
+
+
+import numpy as np
+
+def calculate_variance(elevation_angle, snr, k_ion=5.0, k_trop=0.5, k_multipath=1.0):
+    """
+    Calculates the variance of a pseudorange measurement.
+
+    Parameters:
+        elevation_angle (float): Elevation angle in radians.
+        snr (float): Signal-to-Noise Ratio (SNR) for the satellite.
+        k_ion (float): Scaling constant for ionospheric error.
+        k_trop (float): Scaling constant for tropospheric error.
+        k_multipath (float): Scaling constant for multipath error.
+
+    Returns:
+        float: Variance of the pseudorange measurement.
+    """
+    # Ionospheric variance
+    sigma_ion2 = k_ion**2 * (1 / np.sin(elevation_angle))**2
+
+    # Tropospheric variance
+    sigma_trop2 = k_trop**2 * (1 / np.sin(elevation_angle))**2
+
+    # Receiver noise variance
+    sigma_noise2 = 1 / snr
+
+    # Multipath variance
+    sigma_multipath2 = k_multipath**2
+
+    # Total variance
+    variance = sigma_ion2 + sigma_trop2 + sigma_noise2 + sigma_multipath2
+    return variance
+
+def calculate_weight_matrix(elevation_angles, snrs, k_ion=5.0, k_trop=0.5, k_multipath=1.0):
+    """
+    Calculates the weight matrix for pseudorange measurements.
+
+    Parameters:
+        elevation_angles (np.ndarray): Array of elevation angles in radians.
+        snrs (np.ndarray): Array of SNRs for satellites.
+        k_ion (float): Scaling constant for ionospheric error.
+        k_trop (float): Scaling constant for tropospheric error.
+        k_multipath (float): Scaling constant for multipath error.
+
+    Returns:
+        np.ndarray: Weight matrix (diagonal).
+    """
+    variances = np.array([
+        calculate_variance(elev, snr, k_ion, k_trop, k_multipath)
+        for elev, snr in zip(elevation_angles, snrs)
+    ])
+    weights = 1 / variances
+    return np.diag(weights)
+
+# Example usage
+if __name__ == "__main__":
+    # Elevation angles in radians
+    elevation_angles = np.radians([30, 45, 60, 15])
+
+    # Signal-to-Noise Ratios
+    snrs = np.array([40, 50, 55, 30])
+
+    # Calculate weight matrix
+    W = calculate_weight_matrix(elevation_angles, snrs)
+    print("Weight Matrix:")
+    print(W)
+
+
+
+import numpy as np
+
+# Weighted Least Squares (WLS) function
+def weighted_least_squares(H, y, W):
+    """
+    Solve WLS problem: x = (H^T W H)^-1 H^T W y
+
+    Parameters:
+        H (np.ndarray): Design matrix (n x m).
+        y (np.ndarray): Residual vector (n x 1).
+        W (np.ndarray): Weight matrix (n x n, diagonal).
+
+    Returns:
+        np.ndarray: Solution vector (x).
+    """
+    # Ensure W is a diagonal matrix
+    if W.ndim == 1:
+        W = np.diag(W)
+    
+    # Compute the WLS solution
+    HtW = H.T @ W
+    x = np.linalg.inv(HtW @ H) @ HtW @ y
+    return x
+
+# Example usage
+if __name__ == "__main__":
+    # Design matrix
+    H = np.array([
+        [1, 0],
+        [0, 1],
+        [1, 1]
+    ])
+
+    # Residual vector
+    y = np.array([1, 2, 1.5])
+
+    # Weight matrix (diagonal)
+    W = np.array([1, 2, 0.5])  # Higher weights for higher confidence
+
+    # Solve WLS
+    x = weighted_least_squares(H, y, W)
+    print("WLS Solution:", x)
+
+
+
+import numpy as np
+
+def weighted_least_squares(H, y, W):
+    """
+    Solve the weighted least squares (WLS) problem.
+    
+    Parameters:
+        H (np.ndarray): Design matrix (n x 4 for GPS navigation).
+        y (np.ndarray): Residual vector (n x 1).
+        W (np.ndarray): Weight matrix (n x n, diagonal).
+
+    Returns:
+        np.ndarray: Estimated receiver position and clock bias (4 x 1).
+    """
+    HtW = H.T @ W
+    x = np.linalg.inv(HtW @ H) @ HtW @ y
+    return x
+
+def calculate_weight_matrix(elevation_angles, k=1.0):
+    """
+    Calculate the weight matrix based on elevation angles.
+    
+    Parameters:
+        elevation_angles (np.ndarray): Elevation angles of satellites in radians.
+        k (float): Scaling factor for weight computation.
+    
+    Returns:
+        np.ndarray: Diagonal weight matrix.
+    """
+    weights = k / np.sin(elevation_angles)**2
+    return np.diag(weights)
+
+# Example data
+# Satellite positions (ECEF coordinates in meters)
+sat_positions = np.array([
+    [15600e3, 7540e3, 20140e3],  # Satellite 1
+    [18760e3, 2750e3, 18610e3],  # Satellite 2
+    [17610e3, 14630e3, 13480e3], # Satellite 3
+    [19170e3, 610e3, 19920e3]    # Satellite 4
+])
+
+# Pseudorange measurements (in meters)
+pseudoranges = np.array([
+    21140e3,  # Pseudorange to Satellite 1
+    23200e3,  # Pseudorange to Satellite 2
+    22000e3,  # Pseudorange to Satellite 3
+    23940e3   # Pseudorange to Satellite 4
+])
+
+# Receiver initial guess (ECEF coordinates + clock bias)
+receiver_position = np.array([0.0, 0.0, 0.0, 0.0])
+
+# Elevation angles (radians, hypothetical values)
+elevation_angles = np.radians([30, 45, 60, 75])
+
+# Iterative WLS solution
+max_iterations = 10
+tolerance = 1e-4
+
+for iteration in range(max_iterations):
+    # Compute geometric distances between receiver and satellites
+    distances = np.linalg.norm(sat_positions - receiver_position[:3], axis=1)
+
+    # Compute residuals (pseudorange differences)
+    y = pseudoranges - (distances + receiver_position[3])
+
+    # Design matrix (partial derivatives of distances with respect to position and clock bias)
+    H = np.hstack((
+        (sat_positions - receiver_position[:3]) / distances[:, np.newaxis],
+        np.ones((len(sat_positions), 1))
+    ))
+
+    # Weight matrix (based on elevation angles)
+    W = calculate_weight_matrix(elevation_angles)
+
+    # Update receiver position using WLS
+    delta_x = weighted_least_squares(H, y, W)
+    receiver_position += delta_x
+
+    # Check for convergence
+    if np.linalg.norm(delta_x) < tolerance:
+        print(f"Converged after {iteration + 1} iterations")
+        break
+
+# Output final position
+print("Estimated Receiver Position (ECEF):", receiver_position[:3])
+print("Estimated Clock Bias (meters):", receiver_position[3])
+
+
+import numpy as np
+
+def calculate_elevation_angle(receiver_pos, satellite_pos):
+    """
+    Calculate the elevation angle between a GPS satellite and a receiver.
+
+    Parameters:
+        receiver_pos (np.ndarray): Receiver position [x, y, z] in ECEF (meters).
+        satellite_pos (np.ndarray): Satellite position [x, y, z] in ECEF (meters).
+
+    Returns:
+        float: Elevation angle in radians.
+    """
+    # Extract receiver ECEF coordinates
+    x_rec, y_rec, z_rec = receiver_pos
+
+    # Compute latitude and longitude of receiver
+    latitude = np.arctan2(z_rec, np.sqrt(x_rec**2 + y_rec**2))
+    longitude = np.arctan2(y_rec, x_rec)
+
+    # Line-of-sight vector
+    los_vector = satellite_pos - receiver_pos
+
+    # Rotation matrix from ECEF to ENU
+    sin_lat = np.sin(latitude)
+    cos_lat = np.cos(latitude)
+    sin_lon = np.sin(longitude)
+    cos_lon = np.cos(longitude)
+
+    R_ecef_to_enu = np.array([
+        [-sin_lon, cos_lon, 0],
+        [-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat],
+        [cos_lat * cos_lon, cos_lat * sin_lon, sin_lat]
+    ])
+
+    # LOS vector in ENU coordinates
+    los_enu = R_ecef_to_enu @ los_vector
+
+    # Elevation angle
+    elevation_angle = np.arcsin(los_enu[2] / np.linalg.norm(los_enu))
+
+    return elevation_angle
+
+# Example usage
+receiver_position = np.array([6378137.0, 0.0, 0.0])  # Receiver on the equator
+satellite_position = np.array([15600e3, 7540e3, 20140e3])  # Satellite position
+
+elevation_angle = calculate_elevation_angle(receiver_position, satellite_position)
+print(f"Elevation Angle: {np.degrees(elevation_angle):.2f} degrees")
+
