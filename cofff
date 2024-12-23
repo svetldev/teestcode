@@ -1,0 +1,276 @@
+import numpy as np
+
+def weighted_least_squares(H, y, W):
+    """
+    Solve the weighted least squares (WLS) problem.
+
+    Parameters:
+        H (np.ndarray): Design matrix (n x m).
+        y (np.ndarray): Observation residual vector (n x 1).
+        W (np.ndarray): Weight matrix (n x n, diagonal).
+
+    Returns:
+        np.ndarray: Solution vector (m x 1).
+    """
+    HtW = H.T @ W
+    x = np.linalg.inv(HtW @ H) @ HtW @ y
+    return x
+
+def calculate_variance_and_covariance(H, y_residual, W, x_est, n, m):
+    """
+    Calculate the variance and covariance matrix in WLS.
+
+    Parameters:
+        H (np.ndarray): Design matrix (n x m).
+        y_residual (np.ndarray): Residual vector (n x 1).
+        W (np.ndarray): Weight matrix (n x n).
+        x_est (np.ndarray): Estimated parameters (m x 1).
+        n (int): Number of observations.
+        m (int): Number of unknowns.
+
+    Returns:
+        float: Variance of unit weight.
+        np.ndarray: Covariance matrix of estimated parameters (m x m).
+    """
+    # Variance of unit weight
+    sigma_0_squared = (y_residual.T @ W @ y_residual) / (n - m)
+
+    # Covariance matrix of parameters
+    covariance_matrix = sigma_0_squared * np.linalg.inv(H.T @ W @ H)
+
+    return sigma_0_squared[0, 0], covariance_matrix
+
+# Example data
+satellite_positions = np.array([
+    [15600e3, 7540e3, 20140e3],
+    [18760e3, 2750e3, 18610e3],
+    [17610e3, 14630e3, 13480e3],
+    [19170e3, 610e3, 19920e3]
+])
+
+pseudoranges = np.array([
+    21140e3,
+    23200e3,
+    22000e3,
+    23940e3
+])
+
+receiver_position = np.array([0.0, 0.0, 0.0, 0.0])  # Initial guess
+
+elevation_angles = np.radians([30, 45, 60, 75])
+weights = 1 / np.sin(elevation_angles)**2
+W = np.diag(weights)
+
+max_iterations = 10
+tolerance = 1e-4
+n, m = len(pseudoranges), 4
+
+for iteration in range(max_iterations):
+    distances = np.linalg.norm(satellite_positions - receiver_position[:3], axis=1)
+    y_residual = pseudoranges - (distances + receiver_position[3])
+    H = np.hstack((
+        (satellite_positions - receiver_position[:3]) / distances[:, np.newaxis],
+        np.ones((n, 1))
+    ))
+
+    delta_x = weighted_least_squares(H, y_residual[:, np.newaxis], W)
+    receiver_position += delta_x.flatten()
+
+    if np.linalg.norm(delta_x) < tolerance:
+        break
+
+# Compute variance and covariance
+distances = np.linalg.norm(satellite_positions - receiver_position[:3], axis=1)
+y_residual = pseudoranges - (distances + receiver_position[3])
+sigma_0_squared, covariance_matrix = calculate_variance_and_covariance(
+    H, y_residual[:, np.newaxis], W, receiver_position, n, m
+)
+
+print("Variance of Unit Weight:", sigma_0_squared)
+print("Covariance Matrix of Estimated Parameters:\n", covariance_matrix)
+
+
+
+
+
+import numpy as np
+
+def calculate_weights(elevation_angles, k=1.0):
+    """
+    Calculate the weight matrix based on satellite elevation angles.
+
+    Parameters:
+        elevation_angles (np.ndarray): Elevation angles (in radians) for satellites.
+        k (float): Scaling factor for the weights (default = 1.0).
+
+    Returns:
+        np.ndarray: Diagonal weight matrix.
+    """
+    weights = k / np.sin(elevation_angles)**2
+    return np.diag(weights)
+
+# Example satellite elevation angles in degrees
+satellite_elevation_angles_degrees = [15, 30, 45, 60, 75]
+
+# Convert elevation angles to radians
+satellite_elevation_angles_radians = np.radians(satellite_elevation_angles_degrees)
+
+# Calculate the weight matrix
+weight_matrix = calculate_weights(satellite_elevation_angles_radians)
+
+# Display the results
+print("Satellite Elevation Angles (Degrees):", satellite_elevation_angles_degrees)
+print("Satellite Elevation Angles (Radians):", satellite_elevation_angles_radians)
+print("Weight Matrix:\n", weight_matrix)
+
+
+"-------------------------"
+
+  import numpy as np
+
+def calculate_weights(elevation_degrees, snrs, k=1.0):
+    """
+    Calculate the weight matrix based on elevation angles and SNRs.
+
+    Parameters:
+        elevation_degrees (list or np.ndarray): Elevation angles in degrees.
+        snrs (list or np.ndarray): SNR values in dB-Hz.
+        k (float): Scaling factor for weights.
+
+    Returns:
+        np.ndarray: Diagonal weight matrix.
+    """
+    elevation_radians = np.radians(elevation_degrees)
+    weights = k * (np.sin(elevation_radians)**2) * snrs
+    return np.diag(weights)
+
+def weighted_least_squares(H, y, W):
+    """
+    Solve the Weighted Least Squares (WLS) problem.
+
+    Parameters:
+        H (np.ndarray): Design matrix (n x m).
+        y (np.ndarray): Residual vector (n x 1).
+        W (np.ndarray): Weight matrix (n x n, diagonal).
+
+    Returns:
+        np.ndarray: Solution vector (m x 1).
+    """
+    HtW = H.T @ W
+    x = np.linalg.inv(HtW @ H) @ HtW @ y
+    return x
+
+def calculate_variance_and_covariance(H, y_residual, W, n, m):
+    """
+    Calculate the variance of unit weight and covariance matrix.
+
+    Parameters:
+        H (np.ndarray): Design matrix (n x m).
+        y_residual (np.ndarray): Residual vector (n x 1).
+        W (np.ndarray): Weight matrix (n x n).
+        n (int): Number of observations.
+        m (int): Number of unknowns.
+
+    Returns:
+        tuple: (sigma_0_squared, covariance_matrix)
+    """
+    sigma_0_squared = (y_residual.T @ W @ y_residual) / (n - m)
+    covariance_matrix = sigma_0_squared[0, 0] * np.linalg.inv(H.T @ W @ H)
+    return sigma_0_squared[0, 0], covariance_matrix
+
+def main():
+    # Constants
+    c = 299792458  # Speed of light in m/s
+
+    # Satellite positions (ECEF coordinates in meters)
+    sat_positions = np.array([
+        [15600e3, 7540e3, 20140e3],  # Satellite 1
+        [18760e3, 2750e3, 18610e3],  # Satellite 2
+        [17610e3, 14630e3, 13480e3], # Satellite 3
+        [19170e3, 610e3, 19920e3]    # Satellite 4
+    ])
+
+    # Pseudorange measurements (meters)
+    pseudoranges = np.array([
+        21200e3,  # Satellite 1
+        23400e3,  # Satellite 2
+        21800e3,  # Satellite 3
+        24000e3   # Satellite 4
+    ])
+
+    # Elevation angles (degrees)
+    elevation_degrees = [45, 30, 60, 15]
+
+    # SNR values (dB-Hz)
+    snrs = [35, 30, 40, 25]
+
+    # Calculate the weight matrix
+    W = calculate_weights(elevation_degrees, snrs, k=1.0)
+    print("Weight Matrix (W):\n", W)
+
+    # Receiver initial guess: [X, Y, Z, clock bias]
+    receiver_state = np.array([0.0, 0.0, 0.0, 0.0])  # [meters, meters, meters, seconds]
+
+    # Iterative WLS solution parameters
+    max_iterations = 10
+    tolerance = 1e-4
+    n = len(pseudoranges)  # Number of observations
+    m = 4                   # Number of unknowns: X, Y, Z, clock bias
+
+    for iteration in range(max_iterations):
+        # Extract receiver position and clock bias
+        X_rec, Y_rec, Z_rec, b_rec = receiver_state
+
+        # Compute geometric distances to satellites
+        distances = np.linalg.norm(sat_positions - receiver_state[:3], axis=1)
+
+        # Compute residuals: observed pseudorange - (computed pseudorange)
+        # Computed pseudorange includes clock bias: distance + c * b
+        y = pseudoranges - (distances + c * b_rec)
+        y = y.reshape(-1, 1)  # Column vector
+
+        # Construct the design matrix H
+        # Partial derivatives with respect to X, Y, Z, and clock bias
+        H = np.hstack((
+            -(sat_positions - receiver_state[:3]) / distances[:, np.newaxis],
+            np.ones((n, 1)) * c
+        ))
+
+        # Solve for the update using WLS
+        delta_x = weighted_least_squares(H, y, W)
+
+        # Update receiver state
+        receiver_state += delta_x.flatten()
+
+        # Check for convergence
+        if np.linalg.norm(delta_x) < tolerance:
+            print(f"Converged after {iteration + 1} iterations")
+            break
+    else:
+        print("Maximum iterations reached without convergence.")
+
+    # Final receiver position and clock bias
+    X_est, Y_est, Z_est, b_est = receiver_state
+    print("\nEstimated Receiver Position (ECEF meters):")
+    print(f"X: {X_est:.3f} m")
+    print(f"Y: {Y_est:.3f} m")
+    print(f"Z: {Z_est:.3f} m")
+    print(f"Clock Bias: {b_est:.9f} s")
+
+    # Compute residuals for variance and covariance
+    distances = np.linalg.norm(sat_positions - receiver_state[:3], axis=1)
+    y_residual = pseudoranges - (distances + c * b_est)
+    y_residual = y_residual.reshape(-1, 1)
+
+    # Calculate variance and covariance matrix
+    sigma_0_squared, covariance_matrix = calculate_variance_and_covariance(
+        H, y_residual, W, n, m
+    )
+
+    print("\nVariance of Unit Weight (sigma0^2):", sigma_0_squared)
+    print("\nCovariance Matrix of Estimated Parameters:")
+    print(covariance_matrix)
+
+if __name__ == "__main__":
+    main()
+
