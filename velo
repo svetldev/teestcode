@@ -1,0 +1,132 @@
+import numpy as np
+
+def calculate_velocity(sat_positions, receiver_position, pseudorange_rates):
+    """
+    Calculate the receiver's velocity and clock drift.
+
+    Parameters:
+        sat_positions (ndarray): Satellite positions [N, 3] in meters.
+        receiver_position (ndarray): Receiver position [3] in meters.
+        pseudorange_rates (ndarray): Pseudorange rates [N] in meters/second.
+
+    Returns:
+        velocity (ndarray): Receiver velocity [v_x, v_y, v_z] in meters/second.
+        clock_drift (float): Clock drift rate in meters/second.
+    """
+    num_satellites = sat_positions.shape[0]
+
+    # Initialize design matrix H and observation vector z
+    H = np.zeros((num_satellites, 4))
+    z = np.zeros(num_satellites)
+
+    for i in range(num_satellites):
+        # Compute line-of-sight vector
+        los_vector = sat_positions[i] - receiver_position
+        distance = np.linalg.norm(los_vector)
+        unit_vector = los_vector / distance
+
+        # Fill design matrix H
+        H[i, :3] = unit_vector
+        H[i, 3] = 1  # Clock drift component
+
+        # Observation vector z
+        z[i] = pseudorange_rates[i]
+
+    # Solve the system using least squares
+    x, residuals, rank, s = np.linalg.lstsq(H, z, rcond=None)
+
+    # Extract velocity and clock drift
+    velocity = x[:3]
+    clock_drift = x[3]
+
+    return velocity, clock_drift
+
+# Пример использования
+if __name__ == "__main__":
+    # Позиции спутников (в метрах)
+    sat_positions = np.array([
+        [20200000, 14000000, 21700000],
+        [21200000, 13000000, 22200000],
+        [19800000, 13500000, 21500000],
+        [20000000, 14500000, 22000000]
+    ])
+
+    # Позиция приёмника (в метрах)
+    receiver_position = np.array([21000000, 14000000, 22000000])
+
+    # Псевдоскорости (в метрах/секунду)
+    pseudorange_rates = np.array([-2000, -2100, -1900, -2050])
+
+    # Расчёт скорости и дрейфа часов
+    velocity, clock_drift = calculate_velocity(sat_positions, receiver_position, pseudorange_rates)
+
+    print(f"Скорость приёмника (м/с): {velocity}")
+    print(f"Дрейф часов (м/с): {clock_drift}")
+
+
+
+  import numpy as np
+
+def calculate_velocity(sat_positions, receiver_position, pseudorange_rates):
+    """
+    Calculate the receiver's velocity and clock drift.
+
+    Parameters:
+        sat_positions (ndarray): Satellite positions [N, 3] in meters.
+        receiver_position (ndarray): Receiver position [3] in meters.
+        pseudorange_rates (ndarray): Pseudorange rates [N] in meters/second.
+
+    Returns:
+        velocity (ndarray): Receiver velocity [v_x, v_y, v_z] in meters/second.
+        clock_drift (float): Clock drift rate in meters/second.
+    """
+    num_satellites = sat_positions.shape[0]
+
+    # Initialize design matrix H and observation vector z
+    H = np.zeros((num_satellites, 4))
+    z = np.zeros(num_satellites)
+
+    for i in range(num_satellites):
+        # Compute line-of-sight vector
+        los_vector = sat_positions[i] - receiver_position
+        distance = np.linalg.norm(los_vector)
+        unit_vector = los_vector / distance
+
+        # Fill design matrix H
+        H[i, :3] = unit_vector
+        H[i, 3] = 1  # Clock drift component
+
+        # Observation vector z
+        z[i] = pseudorange_rates[i]
+
+    # Solve the system using least squares
+    x, residuals, rank, s = np.linalg.lstsq(H, z, rcond=None)
+
+    # Extract velocity and clock drift
+    velocity = x[:3]
+    clock_drift = x[3]
+
+    return velocity, clock_drift
+
+# Пример использования
+if __name__ == "__main__":
+    # Позиции спутников (в метрах)
+    sat_positions = np.array([
+        [20200000, 14000000, 21700000],
+        [21200000, 13000000, 22200000],
+        [19800000, 13500000, 21500000],
+        [20000000, 14500000, 22000000]
+    ])
+
+    # Позиция приёмника (в метрах)
+    receiver_position = np.array([21000000, 14000000, 22000000])
+
+    # Псевдоскорости (в метрах/секунду)
+    pseudorange_rates = np.array([-2000, -2100, -1900, -2050])
+
+    # Расчёт скорости и дрейфа часов
+    velocity, clock_drift = calculate_velocity(sat_positions, receiver_position, pseudorange_rates)
+
+    print(f"Скорость приёмника (м/с): {velocity}")
+    print(f"Дрейф часов (м/с): {clock_drift}")
+
