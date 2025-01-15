@@ -1,0 +1,49 @@
+import numpy as np
+from scipy.linalg import lstsq
+
+# Скорость света (м/с)
+c = 3e8
+
+# Номинальная частота сигнала ГЛОНАСС (Гц)
+f0 = 1.602e9  # Пример для L1-диапазона
+
+# Пример данных для 4 спутников
+# Координаты спутников (м)
+sat_positions = np.array([
+    [15600e3, 7540e3, 20140e3],
+    [18760e3, 2750e3, 18610e3],
+    [17610e3, 14630e3, 13480e3],
+    [19170e3, 610e3, 18390e3]
+])
+
+# Координаты приёмника (м)
+receiver_position = np.array([6370e3, 0, 0])
+
+# Измеренные доплеровские сдвиги частоты (Гц)
+doppler_shifts = np.array([-3200, 2100, -1500, 500])
+
+# Вычисление расстояний до спутников
+distances = np.linalg.norm(sat_positions - receiver_position, axis=1)
+
+# Вычисление псевдоскоростей
+pseudoranges_rates = -doppler_shifts * c / f0
+
+# Формирование матрицы A и вектора b для системы уравнений
+A = np.hstack([
+    (sat_positions - receiver_position) / distances[:, np.newaxis],
+    np.ones((len(sat_positions), 1))
+])
+b = pseudoranges_rates
+
+# Решение системы уравнений методом наименьших квадратов
+solution, residuals, rank, s = lstsq(A, b)
+
+# Извлечение компонентов скорости и дрейфа часов
+velocity = solution[:3]
+clock_drift = solution[3]
+
+print(f"Скорость приёмника (м/с): {velocity}")
+print(f"Дрейф часов приёмника (м/с): {clock_drift}")
+
+
+
