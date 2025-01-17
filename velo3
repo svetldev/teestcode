@@ -1,0 +1,40 @@
+import numpy as np
+
+# Константы
+c = 299_792_458  # скорость света в м/с
+f_c = 1_575_420_000  # частота L1 в Гц
+
+# Примерные данные (замените на реальные измерения)
+doppler_shifts = np.array([-500, 300, -200, 100])  # измеренные доплеровские сдвиги в Гц
+satellite_positions = np.array([
+    [15600e3, 7540e3, 20140e3],
+    [18760e3, 2750e3, 18610e3],
+    [17610e3, 14630e3, 13480e3],
+    [19170e3, 610e3, 18390e3]
+])  # координаты спутников в метрах
+satellite_velocities = np.array([
+    [2.6e3, 1.6e3, 2.1e3],
+    [2.0e3, 1.9e3, 2.7e3],
+    [2.3e3, 1.4e3, 2.2e3],
+    [2.1e3, 1.7e3, 2.4e3]
+])  # скорости спутников в м/с
+
+# Предположительное положение приёмника (можно использовать предыдущее известное положение)
+receiver_position = np.array([0, 0, 0])  # в метрах
+
+# Вычисление единичных векторов направления от спутников к приёмнику
+unit_vectors = satellite_positions - receiver_position
+unit_vectors = unit_vectors / np.linalg.norm(unit_vectors, axis=1)[:, np.newaxis]
+
+# Составление матрицы A и вектора b для системы уравнений
+A = np.zeros((len(doppler_shifts), 3))
+b = np.zeros(len(doppler_shifts))
+
+for i in range(len(doppler_shifts)):
+    A[i, :] = - (f_c / c) * unit_vectors[i, :]
+    b[i] = doppler_shifts[i] + (f_c / c) * np.dot(satellite_velocities[i, :], unit_vectors[i, :])
+
+# Решение системы уравнений для определения скорости приёмника
+receiver_velocity, residuals, rank, s = np.linalg.lstsq(A, b, rcond=None)
+
+print(f"Скорость приёмника (м/с): {receiver_velocity}")
