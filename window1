@@ -1,0 +1,97 @@
+def weighted_moving_average(data, window_size, weights):
+    if len(weights) != window_size:
+        raise ValueError("Длина списка весов должна совпадать с размером окна.")
+    if sum(weights) != 1:
+        raise ValueError("Сумма весов должна быть равна 1.")
+
+    wma = []
+    for i in range(len(data) - window_size + 1):
+        window = data[i:i + window_size]
+        weighted_sum = sum(w * x for w, x in zip(weights, window))
+        wma.append(weighted_sum)
+    return wma
+
+# Пример использования
+data = [10, 20, 30, 40, 50, 60, 70]
+window_size = 3
+weights = [0.1, 0.3, 0.6]  # Сумма весов должна быть равна 1
+
+
+1. Простое скользящее среднее (SMA):
+
+Простое скользящее среднее вычисляется как среднее арифметическое значений в окне фиксированного размера. Для его расчёта можно использовать библиотеку pandas:
+wma = weighted_moving_average(data, window_size, weights)
+print("Взвешенное скользящее среднее:", wma)
+
+import pandas as pd
+
+def simple_moving_average(data, window_size):
+    return pd.Series(data).rolling(window=window_size).mean().tolist()
+
+# Пример использования
+data = [10, 20, 30, 40, 50, 60, 70]
+window_size = 3
+sma = simple_moving_average(data, window_size)
+print("Простое скользящее среднее:", sma)
+
+
+2. Взвешенное скользящее среднее (WMA):
+
+Взвешенное скользящее среднее придаёт различный вес значениям в окне. Реализуем его следующим образом:
+
+import numpy as np
+
+def weighted_moving_average(data, weights):
+    window_size = len(weights)
+    wma = []
+    for i in range(len(data) - window_size + 1):
+        window = data[i:i + window_size]
+        weighted_sum = sum(w * x for w, x in zip(weights, window))
+        wma.append(weighted_sum)
+    return wma
+
+# Пример использования
+data = [10, 20, 30, 40, 50, 60, 70]
+weights = [0.1, 0.3, 0.6]  # Сумма весов должна быть равна 1
+wma = weighted_moving_average(data, weights)
+print("Взвешенное скользящее среднее:", wma)
+
+
+3. Экспоненциальное скользящее среднее (EMA):
+
+Экспоненциальное скользящее среднее придаёт больший вес более свежим данным. Реализуем его следующим образом:
+
+def exponential_moving_average(data, alpha):
+    ema = [data[0]]  # Начальное значение EMA равно первому значению данных
+    for i in range(1, len(data)):
+        ema.append(alpha * data[i] + (1 - alpha) * ema[i - 1])
+    return ema
+
+# Пример использования
+data = [10, 20, 30, 40, 50, 60, 70]
+alpha = 0.5  # Коэффициент сглаживания
+ema = exponential_moving_average(data, alpha)
+print("Экспоненциальное скользящее среднее:", ema)
+
+
+4. Модифицированное скользящее среднее (MMA):
+
+Модифицированное скользящее среднее сочетает в себе свойства SMA и EMA. Реализуем его следующим образом:
+
+
+def modified_moving_average(data, window_size):
+    mma = [sum(data[:window_size]) / window_size]  # Начальное значение MMA как SMA
+    for i in range(window_size, len(data)):
+        mma.append((data[i] + (window_size - 1) * mma[i - window_size]) / window_size)
+    return mma
+
+# Пример использования
+data = [10, 20, 30, 40, 50, 60, 70]
+window_size = 3
+mma = modified_moving_average(data, window_size)
+print("Модифицированное скользящее среднее:", mma)
+
+
+
+
+
