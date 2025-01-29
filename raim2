@@ -1,0 +1,163 @@
+import numpy as np
+from scipy.stats import chi2
+
+def raim_fde_best_residuals(z, H, W, threshold_alpha=0.01):
+    """
+    RAIM FDE с поиском лучшей комбинации спутников по минимальной SSE.
+    
+    :param z: Вектор измерений псевдодальностей.
+    :param H: Матрица наблюдений (геометрическая матрица).
+    :param W: Матрица весов (диагональная).
+    :param threshold_alpha: Уровень значимости для порога хи-квадрат.
+    :return: Лучшая комбинация спутников, решение и минимальная SSE.
+    """
+    n = len(z)  # Количество измерений
+    m = H.shape[1]  # Количество параметров (4: x, y, z, clock bias)
+    
+    # Порог обнаружения (хи-квадрат)
+    threshold = chi2.ppf(1 - threshold_alpha, n - m)
+    
+    best_combination = None
+    best_x = None
+    best_sse = float('inf')
+    
+    # Перебор всех комбинаций (исключение по одному спутнику)
+    for i in range(n):
+        # Исключаем i-й спутник
+        z_new = np.delete(z, i)
+        H_new = np.delete(H, i, axis=0)
+        W_new = np.delete(np.delete(W, i, axis=0), i, axis=1)
+        
+        # Взвешенный метод наименьших квадратов
+        H_T = H_new.T
+        x = np.linalg.inv(H_T @ W_new @ H_new) @ H_T @ W_new @ z_new
+        
+        # Невязки
+        r = z_new - H_new @ x
+        
+        # Сумма квадратов невязок (SSE) с учётом весов
+        sse = r.T @ W_new @ r
+        
+        # Проверка на целостность и обновление лучшей комбинации
+        if sse < threshold and sse < best_sse:
+            best_sse = sse
+            best_combination = np.delete(np.arange(n), i)
+            best_x = x
+    
+    if best_combination is not None:
+        print("Найдена лучшая комбинация спутников:", best_combination)
+        print("Решение (x, y, z, clock bias):", best_x)
+        print("Минимальная SSE:", best_sse)
+        return best_combination, best_x, best_sse
+    else:
+        print("Нет комбинации, удовлетворяющей критерию целостности.")
+        return None, None, None
+
+# Пример использования
+# Измерения псевдодальностей (в метрах)
+z = np.array([22000000, 23000000, 24000000, 25000000, 26000000])
+
+# Геометрическая матрица (пример)
+H = np.array([
+    [0.1, 0.2, 0.3, 1],
+    [0.4, 0.5, 0.6, 1],
+    [0.7, 0.8, 0.9, 1],
+    [1.0, 1.1, 1.2, 1],
+    [1.3, 1.4, 1.5, 1]
+])
+
+# Матрица весов (диагональная, обратно пропорциональная дисперсии измерений)
+W = np.diag([1/0.1, 1/0.2, 1/0.3, 1/0.4, 1/0.5])
+
+# Вызов RAIM FDE с поиском лучшей комбинации по невязкам
+best_combination, best_x, best_sse = raim_fde_best_residuals(z, H, W)
+
+
+
+
+import numpy as np
+from scipy.stats import chi2
+
+def compute_gdop(H):
+    """
+    Вычисляет геометрическую погрешность (GDOP) для заданной матрицы H.
+    """
+    Q = np.linalg.inv(H.T @ H)
+    gdop = np.sqrt(np.trace(Q))
+    return gdop
+
+def raim_fde_combinations(z, H, W, threshold_alpha=0.01):
+    """
+    RAIM FDE с перебором всех комбинаций спутников.
+    
+    :param z: Вектор измерений псевдодальностей.
+    :param H: Матрица наблюдений (геометрическая матрица).
+    :param W: Матрица весов (диагональная).
+    :param threshold_alpha: Уровень значимости для порога хи-квадрат.
+    :return: Лучшая комбинация спутников, решение и GDOP.
+    """
+    n = len(z)  # Количество измерений
+    m = H.shape[1]  # Количество параметров (4: x, y, z, clock bias)
+    
+    # Порог обнаружения (хи-квадрат)
+    threshold = chi2.ppf(1 - threshold_alpha, n - m)
+    
+    best_combination = None
+    best_x = None
+    best_gdop = float('inf')
+    
+    # Перебор всех комбинаций (исключение по одному спутнику)
+    for i in range(n):
+        # Исключаем i-й спутник
+        z_new = np.delete(z, i)
+        H_new = np.delete(H, i, axis=0)
+        W_new = np.delete(np.delete(W, i, axis=0), i, axis=1)
+        
+        # Взвешенный метод наименьших квадратов
+        H_T = H_new.T
+        x = np.linalg.inv(H_T @ W_new @ H_new) @ H_T @ W_new @ z_new
+        
+        # Невязки
+        r = z_new - H_new @ x
+        
+        # Сумма квадратов невязок (SSE) с учётом весов
+        sse = r.T @ W_new @ r
+        
+        # Проверка на целостность
+        if sse < threshold:
+            # Вычисляем GDOP
+            gdop = compute_gdop(H_new)
+            
+            # Выбираем комбинацию с минимальным GDOP
+            if gdop < best_gdop:
+                best_gdop = gdop
+                best_combination = np.delete(np.arange(n), i)
+                best_x = x
+    
+    if best_combination is not None:
+        print("Найдена лучшая комбинация спутников:", best_combination)
+        print("Решение (x, y, z, clock bias):", best_x)
+        print("GDOP:", best_gdop)
+        return best_combination, best_x, best_gdop
+    else:
+        print("Нет комбинации, удовлетворяющей критерию целостности.")
+        return None, None, None
+
+# Пример использования
+# Измерения псевдодальностей (в метрах)
+z = np.array([22000000, 23000000, 24000000, 25000000, 26000000])
+
+# Геометрическая матрица (пример)
+H = np.array([
+    [0.1, 0.2, 0.3, 1],
+    [0.4, 0.5, 0.6, 1],
+    [0.7, 0.8, 0.9, 1],
+    [1.0, 1.1, 1.2, 1],
+    [1.3, 1.4, 1.5, 1]
+])
+
+# Матрица весов (диагональная, обратно пропорциональная дисперсии измерений)
+W = np.diag([1/0.1, 1/0.2, 1/0.3, 1/0.4, 1/0.5])
+
+# Вызов RAIM FDE с перебором комбинаций
+best_combination, best_x, best_gdop = raim_fde_combinations(z, H, W)
