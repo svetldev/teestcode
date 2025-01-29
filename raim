@@ -1,0 +1,71 @@
+import numpy as np
+from scipy.stats import chi2
+
+def raim_fde(z, H, W, threshold_alpha=0.01):
+    """
+    RAIM FDE (Fault Detection and Exclusion) для ГНСС.
+    
+    :param z: Вектор измерений псевдодальностей.
+    :param H: Матрица наблюдений (геометрическая матрица).
+    :param W: Матрица весов (диагональная).
+    :param threshold_alpha: Уровень значимости для порога хи-квадрат.
+    :return: Корректные измерения, обновлённое решение и ковариационная матрица.
+    """
+    n = len(z)  # Количество измерений
+    m = H.shape[1]  # Количество параметров (4: x, y, z, clock bias)
+    
+    # Взвешенный метод наименьших квадратов
+    H_T = H.T
+    x = np.linalg.inv(H_T @ W @ H) @ H_T @ W @ z
+    
+    # Невязки
+    r = z - H @ x
+    
+    # Сумма квадратов невязок (SSE) с учётом весов
+    sse = r.T @ W @ r
+    
+    # Порог обнаружения (хи-квадрат)
+    threshold = chi2.ppf(1 - threshold_alpha, n - m)
+    
+    # Проверка на наличие ошибки
+    if sse > threshold:
+        print("Ошибка обнаружена, выполняется исключение...")
+        
+        # Находим измерение с наибольшим вкладом в невязку
+        contribution = np.abs(r * np.diag(W))  # Взвешенный вклад
+        faulty_index = np.argmax(contribution)
+        
+        # Исключаем подозрительное измерение
+        z_new = np.delete(z, faulty_index)
+        H_new = np.delete(H, faulty_index, axis=0)
+        W_new = np.delete(np.delete(W, faulty_index, axis=0), faulty_index, axis=1)
+        
+        # Рекурсивно вызываем RAIM FDE для обновлённых данных
+        return raim_fde(z_new, H_new, W_new, threshold_alpha)
+    else:
+        print("Ошибки не обнаружены.")
+        # Ковариационная матрица невязок
+        C_r = np.linalg.inv(W) - H @ np.linalg.inv(H_T @ W @ H) @ H_T
+        return z, H, W, x, C_r
+
+# Пример использования
+# Измерения псевдодальностей (в метрах)
+z = np.array([22000000, 23000000, 24000000, 25000000, 26000000])
+
+# Геометрическая матрица (пример)
+H = np.array([
+    [0.1, 0.2, 0.3, 1],
+    [0.4, 0.5, 0.6, 1],
+    [0.7, 0.8, 0.9, 1],
+    [1.0, 1.1, 1.2, 1],
+    [1.3, 1.4, 1.5, 1]
+])
+
+# Матрица весов (диагональная, обратно пропорциональная дисперсии измерений)
+W = np.diag([1/0.1, 1/0.2, 1/0.3, 1/0.4, 1/0.5])
+
+# Вызов RAIM FDE
+z_new, H_new, W_new, x_new, C_r = raim_fde(z, H, W)
+print("Обновлённые измерения:", z_new)
+print("Обновлённое решение (x, y, z, clock bias):", x_new)
+print("Ковариационная матрица невязок:\n", C_r)
