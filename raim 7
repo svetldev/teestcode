@@ -1,0 +1,174 @@
+import numpy as np
+from scipy.stats import chi2
+from itertools import combinations
+
+def compute_gdop(H):
+    """
+    Вычисляет геометрическую погрешность (GDOP) для заданной матрицы H.
+    """
+    Q = np.linalg.inv(H.T @ H)
+    gdop = np.sqrt(np.trace(Q))
+    return gdop
+
+def extended_kalman_filter(z, H, W, x_prev, P_prev, Q, R):
+    """
+    Расширенный фильтр Калмана (EKF) для улучшения оценки состояния.
+    
+    :param z: Вектор измерений.
+    :param H: Матрица наблюдений.
+    :param W: Матрица весов.
+    :param x_prev: Предыдущее состояние.
+    :param P_prev: Предыдущая ковариационная матрица состояния.
+    :param Q: Ковариационная матрица шума процесса.
+    :param R: Ковариационная матрица шума измерений.
+    :return: Обновлённое состояние и ковариационная матрица.
+    """
+    # Прогноз
+    x_pred = x_prev  # В простейшем случае состояние не меняется
+    P_pred = P_prev + Q
+    
+    # Обновление
+    K = P_pred @ H.T @ np.linalg.inv(H @ P_pred @ H.T + R)
+    x_update = x_pred + K @ (z - H @ x_pred)
+    P_update = (np.eye(len(x_prev)) - K @ H) @ P_pred
+    
+    return x_update, P_update
+
+def raim_fde_modern(z, H, W, threshold_alpha=0.01, min_satellites=4):
+    """
+    Современный алгоритм RAIM FDE с перебором всех комбинаций спутников и использованием EKF.
+    
+    :param z: Вектор измерений псевдодальностей.
+    :param H: Матрица наблюдений (геометрическая матрица).
+    :param W: Матрица весов (диагональная).
+    :param threshold_alpha: Уровень значимости для порога хи-квадрат.
+    :param min_satellites: Минимальное количество спутников для решения задачи.
+    :return: Лучшая комбинация спутников, решение, минимальная SSE, невязки, GDOP и ковариационная матрица.
+    """
+    n = len(z)  # Количество измерений
+    m = H.shape[1]  # Количество параметров (4: x, y, z, clock bias)
+    
+    # Порог обнаружения (хи-квадрат)
+    threshold = chi2.ppf(1 - threshold_alpha, min_satellites - m)
+    
+    best_combination = None
+    best_x = None
+    best_sse = float('inf')
+    best_residuals = None
+    best_gdop = None
+    best_C_r = None
+    
+    # Перебор всех возможных комбинаций спутников
+    for k in range(min_satellites, n + 1):  # Начиная с min_satellites до n
+        for indices in combinations(range(n), k):
+            # Выбираем подмножество спутников
+            z_new = z[list(indices)]
+            H_new = H[list(indices), :]
+            W_new = W[list(indices), :][:, list(indices)]
+            
+            # Взвешенный метод наименьших квадратов
+            H_T = H_new.T
+            try:
+                x = np.linalg.inv(H_T @ W_new @ H_new) @ H_T @ W_new @ z_new
+            except np.linalg.LinAlgError:
+                continue  # Пропускаем вырожденные комбинации
+            
+            # Невязки
+            r = z_new - H_new @ x
+            
+            # Сумма квадратов невязок (SSE) с учётом весов
+            sse = r.T @ W_new @ r
+            
+            # Проверка на целостность и обновление лучшей комбинации
+            if sse < threshold and sse < best_sse:
+                best_sse = sse
+                best_combination = indices
+                best_x = x
+                best_residuals = r
+                best_gdop = compute_gdop(H_new)
+                best_C_r = np.linalg.inv(W_new) - H_new @ np.linalg.inv(H_T @ W_new @ H_new) @ H_T
+    
+    # Применение расширенного фильтра Калмана (EKF)
+    if best_combination is not None:
+        # Инициализация EKF
+        x_prev = best_x
+        P_prev = best_C_r
+        Q = np.eye(m) * 1e-4  # Ковариационная матрица шума процесса
+        R = np.eye(len(best_combination)) * 1e-2  # Ковариационная матрица шума измерений
+        
+        # Обновление состояния с помощью EKF
+        z_new = z[list(best_combination)]
+        H_new = H[list(best_combination), :]
+        W_new = W[list(best_combination), :][:, list(best_combination)]
+
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+x_update, P_update = extended_kalman_filter(z_new, H_new, W_new, x_prev, P_prev, Q, R)
+        
+        print("Найдена лучшая комбинация спутников:", best_combination)
+        print("Решение (x, y, z, clock bias):", x_update)
+        print("Минимальная SSE:", best_sse)
+        print("Невязки для лучшей комбинации:", best_residuals)
+        print("GDOP для лучшей комбинации:", best_gdop)
+        print("Ковариационная матрица невязок:\n", P_update)
+        return best_combination, x_update, best_sse, best_residuals, best_gdop, P_update
+    else:
+        print("Нет комбинации, удовлетворяющей критерию целостности.")
+        return None, None, None, None, None, None
+
+# Пример использования
+# Измерения псевдодальностей (в метрах)
+z = np.array([22000000, 23000000, 24000000, 25000000, 26000000])
+
+# Геометрическая матрица (пример)
+H = np.array([
+    [0.1, 0.2, 0.3, 1],
+    [0.4, 0.5, 0.6, 1],
+    [0.7, 0.8, 0.9, 1],
+    [1.0, 1.1, 1.2, 1],
+    [1.3, 1.4, 1.5, 1]
+])
+
+# Матрица весов (диагональная, обратно пропорциональная дисперсии измерений)
+W = np.diag([1/0.1, 1/0.2, 1/0.3, 1/0.4, 1/0.5])
+
+# Вызов современного RAIM FDE
+best_combination, best_x, best_sse, best_residuals, best_gdop, best_C_r = raim_fde_modern(z, H, W)
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+import numpy as np
+
+# Параметры шума
+sigma_pos = 1.0  # Стандартное отклонение шума позиции (м)
+sigma_vel = 0.1  # Стандартное отклонение шума скорости (м/с)
+sigma_clock = 1e-3  # Стандартное отклонение шума часов (с)
+
+# Ковариационная матрица шума процесса
+Q_pos = sigma_pos**2 * np.eye(3)  # Для позиции (x, y, z)
+Q_vel = sigma_vel**2 * np.eye(3)  # Для скорости (vx, vy, vz)
+Q_clock = sigma_clock**2  # Для смещения часов
+
+Q = np.block([
+    [Q_pos, np.zeros((3, 3)), np.zeros((3, 1))],
+    [np.zeros((3, 3)), Q_vel, np.zeros((3, 1))],
+    [np.zeros((1, 3)), np.zeros((1, 3)), Q_clock]
+])
+
+print("Ковариационная матрица шума процесса (Q):\n", Q)
+
+
+!!!!!!!!!!!!!!!!!!!!!!
+Параметры шума измерений
+snr = np.array([30, 40, 35, 50])  # Отношение сигнал/шум для каждого спутника
+sigma2 = 1 / snr  # Дисперсия шума
+
+# Ковариационная матрица шума измерений
+R = np.diag(sigma2)
+
+print("Ковариационная матрица шума измерений (R):\n", R)
+
