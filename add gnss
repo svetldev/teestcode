@@ -1,0 +1,59 @@
+import numpy as np
+
+def geometric_distance(sat_pos, receiver_pos):
+    """Вычисляет геометрическое расстояние между спутником и приемником"""
+    return np.linalg.norm(sat_pos - receiver_pos)
+
+# Пример координат спутников (GPS, ГЛОНАСС, Galileo, BeiDou)
+sat_positions = np.array([
+    [15600, 7540, 20140],  # GPS
+    [18760, 2750, 18610],  # GPS
+    [17610, 14630, 13480], # ГЛОНАСС
+    [19170, 610, 13810],   # ГЛОНАСС
+    [21000, 5200, 19800],  # Galileo
+    [22000, 6000, 21000]   # BeiDou
+])
+
+# Псевдодальности от приемника
+pseudoranges = np.array([21420, 21740, 22110, 22340, 22900, 23200])
+
+# Начальная позиция приемника
+receiver_pos = np.array([0, 0, 6371000])
+
+# Скорость света
+c = 299792458
+
+# Матрица H и вектор b
+H = []
+b = []
+
+for i, sat_pos in enumerate(sat_positions):
+    rho_calc = geometric_distance(sat_pos, receiver_pos)
+    H_row = np.hstack(((sat_pos - receiver_pos) / rho_calc, [c]))
+
+    # Добавляем смещение времени для разных ГНСС
+    if 2 <= i < 4:  # ГЛОНАСС
+        H_row = np.append(H_row, c)
+    else:
+        H_row = np.append(H_row, 0)
+
+    if i >= 4:  # Galileo и BeiDou
+        H_row = np.append(H_row, c)
+    else:
+        H_row = np.append(H_row, 0)
+
+    H.append(H_row)
+    b.append(pseudoranges[i] - rho_calc)
+
+H = np.array(H)
+b = np.array(b)
+
+# Решение МНК
+x = np.linalg.inv(H.T @ H) @ H.T @ b
+
+# Разбираем результаты
+delta_x, delta_y, delta_z, delta_t, delta_t_GLONASS, delta_t_Galileo = x
+print(f"Исправления координат: Δx={delta_x:.2f}, Δy={delta_y:.2f}, Δz={delta_z:.2f}")
+print(f"Смещение часов GPS: {delta_t / c:.9f} с")
+print(f"Смещение часов ГЛОНАСС: {delta_t_GLONASS / c:.9f} с")
+print(f"Смещение часов Galileo/BeiDou: {delta_t_Galileo / c:.9f} с")
